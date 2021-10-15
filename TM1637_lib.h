@@ -21,4 +21,4 @@ void TM1637_stop(void);
 void TM1637_writeByte(uint8_t byte);
 void TM1637_sendByte(uint8_t BitAddr, int8_t sendData);
 void TM1637_sendArray(uint8_t sendData[]);
-void TM1637_write(int data);
+void TM1637_write(int data, uint8_t colon);

@@ -14,8 +14,8 @@
 #include <util/delay.h>
 
 const uint8_t digitHEX[] = {0x3f, 0x06, 0x5b, 0x4f,
-	0x66, 0x6d, 0x7d, 0x07,
-	0x7f, 0x6f, 0x00, 0x40
+                        	0x66, 0x6d, 0x7d, 0x07,
+                        	0x7f, 0x6f, 0x00, 0x40
 };
 
 void TM1637_init(void){
@@ -95,7 +95,7 @@ void TM1637_sendArray(uint8_t sendData[]){
 	TM1637_stop();           //
 }
 
-void TM1637_write(int number){
+void TM1637_write(int number, uint8_t colon){
     if ((number > 9999) || (number < -999)) {
         uint8_t data[4] = {0x40, 0x40, 0x40, 0x40};
         TM1637_sendArray((uint8_t *)data);
@@ -119,14 +119,40 @@ void TM1637_write(int number){
           }
           data[0] = 0x00;
           data[1] = 0x00;
-        } else {
+        } else if (number >= 0 ){ 
           data[0] = 0x00;
           data[1] = 0x00;
           data[2] = 0x00;
           data[3] = digitHEX[number % 10];
-        }
-        TM1637_sendArray((uint8_t *)data);   
-        
+        } else if (number > -9 ){ 
+          number = -number;
+          data[0] = 0x00;
+          data[1] = 0x00;
+          data[2] = 0x40;
+          data[3] = digitHEX[number % 10];      
+        } else if (number > -99){   
+          number = -number;
+          for (uint8_t i = 0; i < 4; i++) {
+            data[3 - i] = digitHEX[number % 10];
+            number /= 10; 
+          }
+          data[0] = 0x00;
+          data[1] = 0x40;           
+        } else if (number > -999 ){  
+          number = -number;
+          for (uint8_t i = 0; i < 4; i++) {
+            data[3 - i] = digitHEX[number % 10];
+            number /= 10; 
+          }
+          data[0] = 0x40;      
+        } else {
+          data[0] = 0x40;
+          data[1] = 0x40;
+          data[2] = 0x40;
+          data[3] = 0x40; 
+        } 
+        if (colon) data[1] |= 0x80;
+        TM1637_sendArray((uint8_t *)data);           
     }
 }
 
