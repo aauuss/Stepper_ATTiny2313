@@ -11,7 +11,7 @@
 #include "TM1637_lib.h"
 #include "EEPROM_lib.h"
 
-#define MOT_DELAY 15
+#define MOT_DELAY 10
 #define STEP_TIME 1000     //задержка между шагами для ведения 
 
 #define MOT_A PB2
@@ -22,11 +22,19 @@
 #define ENC_B PD3
 #define ENC_SW PD6
 
+uint32_t    msec = 0, 
+            lastTimeStep = 0;      
+int16_t     shift = 0;
 
-uint32_t msec = 0, lastTimeStep = 0;      
-int16_t shift = 0, counter = 0;
-uint16_t sec = 0,  lastTimeShiftChange = 0;
-int8_t stateDrive = 0, lastSwState = 0, mode = 1, colon = 0, direction = 1, interruptDetected = 0, lastTimeColonShow = 0;
+uint16_t    sec = 0,  
+            lastTimeShiftChange = 0;
+            
+int8_t      stateDrive = 0, 
+            lastSwState = 0, 
+            mode = 1, 
+            colon = 0, 
+            direction = 1, 
+            interruptDetected = 0;
 
 //===================================ПРЕРЫВАНИЯ================================================
 ISR(INT0_vect) {
@@ -55,7 +63,6 @@ ISR(WDT_OVERFLOW_vect){
   sec++;
   colon ^= 1;
 }
-//ISR(PCINT_vect){}
 
 //===================================НАСТРОЙКИ==================================================
 void setup(void) {  
@@ -69,7 +76,7 @@ void setup(void) {
   OCR1AH = 0x03;       //считаем до 1000
   OCR1AL = 0xE8;
     //настроим watchdog как очень медленный таймер
-  WDTCSR |= (1 << WDIE) | (1 << WDP2) | (1 << WDP0);
+  WDTCSR |= (1 << WDIE) | (1 << WDP2) | (1 << WDP0);    //прерывание каждые 0,5 сек
     //настройка ног
   DDRD &= ~((1 << ENC_A) | (1 << ENC_B) | (1 << ENC_SW)); //ноги от энкодера на вход
   DDRB |= (1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D);
@@ -130,23 +137,17 @@ void command (int commandNumber){
 
 void oneStepForward(void){
   command (incState());
-  counter++;
 }
 
 void oneStepBack(void){
   command (decState());
-  counter--;
 }
 
 
 //===================================ГЛАВНАЯ ПРОГРАММА==========================================
 void main(void) {
   setup();  
-  TM1637_write(9999,1);
-  _delay_ms(2000);
-  TM1637_write(0,1);
-  while (1) {
-  
+  while (1) {  
   sec = msec/1000;
 //-----------кнопка энкодера----------
     if ((lastSwState == 0) && (!(PIND & (1 << ENC_SW)))){
