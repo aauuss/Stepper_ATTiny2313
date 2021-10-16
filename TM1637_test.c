@@ -9,8 +9,11 @@
 //#include <math.h>
 
 #include "TM1637_lib.h"
+#include "EEPROM_lib.h"
 
 #define MOT_DELAY 15
+#define STEP_TIME 1000     //задержка между шагами для ведения 
+
 #define MOT_A PB2
 #define MOT_B PB3
 #define MOT_C PB4
@@ -20,19 +23,21 @@
 #define ENC_SW PD6
 
 
-uint32_t msec = 0, sec = 0;      
-int shift = 0, counter = 0;
-int8_t stateDrive = 0, lastSwState = 0, mode = 1, colon = 0, direction = 1, interruptDetected = 0;
+uint32_t msec = 0, lastTimeStep = 0;      
+int16_t shift = 0, counter = 0;
+uint16_t sec = 0,  lastTimeShiftChange = 0;
+int8_t stateDrive = 0, lastSwState = 0, mode = 1, colon = 0, direction = 1, interruptDetected = 0, lastTimeColonShow = 0;
 
 //===================================ПРЕРЫВАНИЯ================================================
 ISR(INT0_vect) {
-  interruptDetected = 1;
   if (mode){
     if (PIND & (1 << ENC_B)) {
-      if (shift < 9999) {if (PIND & (1 << ENC_SW)) {shift += 1;} else {shift += 5;}}
+      if (shift < 999) {if (PIND & (1 << ENC_SW)) {shift += 1;} else {shift += 10;}}
     } else {
-      if (shift > -999) {if (PIND & (1 << ENC_SW)) {shift -= 1;} else {shift -= 5;}}
+      if (shift > -990) {if (PIND & (1 << ENC_SW)) {shift -= 1;} else {shift -= 10;}}
     }
+    lastTimeShiftChange = sec;
+    interruptDetected = 1;
   } else {
     if (PIND & (1 << ENC_B)) {
       if (direction < 2) direction++;
@@ -46,7 +51,11 @@ ISR(TIMER1_COMPA_vect){
   msec++;
 }
 
-ISR(PCINT_vect){}
+ISR(WDT_OVERFLOW_vect){
+  sec++;
+  colon ^= 1;
+}
+//ISR(PCINT_vect){}
 
 //===================================НАСТРОЙКИ==================================================
 void setup(void) {  
@@ -56,9 +65,11 @@ void setup(void) {
     //настройка таймера
   TCCR1A = 0x00;
   TCCR1B = (1 << WGM12) | (1 << CS10);
-  TIMSK = (1 << OCIE1A) | (0 << ICIE1);//TODO: здесь какая-то лажа!!!!!!!
+  TIMSK = (1 << OCIE1A);
   OCR1AH = 0x03;       //считаем до 1000
   OCR1AL = 0xE8;
+    //настроим watchdog как очень медленный таймер
+  WDTCSR |= (1 << WDIE) | (1 << WDP2) | (1 << WDP0);
     //настройка ног
   DDRD &= ~((1 << ENC_A) | (1 << ENC_B) | (1 << ENC_SW)); //ноги от энкодера на вход
   DDRB |= (1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D);
@@ -67,6 +78,8 @@ void setup(void) {
   sei();   
 
   TM1637_init();
+
+  shift = (EEPROM_read(0) << 8) | EEPROM_read(1);
 }
 
 //==================================ПРОЦЕДУРЫ==================================================
@@ -133,22 +146,35 @@ void main(void) {
   _delay_ms(2000);
   TM1637_write(0,1);
   while (1) {
+  
+  sec = msec/1000;
 //-----------кнопка энкодера----------
     if ((lastSwState == 0) && (!(PIND & (1 << ENC_SW)))){
       lastSwState = 1;
+      interruptDetected = 0;
     }
     if ((lastSwState == 1) && (PIND & (1 << ENC_SW))){
-//      if (interruptDetected ){
-        mode = 0x01;
-//      }
+      if (interruptDetected == 0){
+        mode ^= 1;
+      }
       lastSwState = 0;
+      interruptDetected = 0;
+    }
+//-------------запись shift в EEPROM----------------    
+    if ((sec - lastTimeShiftChange > 2) && (interruptDetected == 1)) {
+      EEPROM_write(0, (shift >> 8));
+      EEPROM_write(1, (shift & 0xFF));
       interruptDetected = 0;
     }
 
 // -----------управление------------
-    if (mode){    
-      if (msec & (1 << 12)) {colon ^= 1;}
-      TM1637_write(interruptDetected, colon);    
+    if (mode){  
+      if (STEP_TIME + shift < 0){ shift = -STEP_TIME; }  
+      if ((msec - lastTimeStep) >= (STEP_TIME + shift)) {           
+        oneStepForward();                                 
+        lastTimeStep = msec;                    
+      }
+      TM1637_write(STEP_TIME + shift, colon);    
     } else {
       if (direction == 1){
         uint8_t arr[4] = {0x00, 0x80, 0x00, 0x00};
