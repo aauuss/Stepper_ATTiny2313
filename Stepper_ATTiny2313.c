@@ -11,7 +11,8 @@
 #include "TM1637_lib.h"
 #include "EEPROM_lib.h"
 
-#define MOT_DELAY 10
+#define MOT_DELAY_ON 20
+#define MOT_DELAY_OFF 2
 #define STEP_TIME 1000     //задержка между шагами для ведения 
 
 #define MOT_A PB2
@@ -27,7 +28,8 @@ uint32_t    msec = 0,
 int16_t     shift = 0;
 
 uint16_t    sec = 0,  
-            lastTimeShiftChange = 0;
+            lastTimeShiftChange = 0,
+            counter = 0;
             
 int8_t      stateDrive = 0, 
             lastSwState = 0, 
@@ -107,29 +109,33 @@ void command (int commandNumber){
   case 0 : 
     PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
     PORTB &= ~(1 << MOT_A);
-    _delay_ms(MOT_DELAY);
+    _delay_ms(MOT_DELAY_ON);
     PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
+    _delay_ms(MOT_DELAY_OFF);
     stateDrive = 0;
     break;
   case 1 : 
     PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
     PORTB &= ~(1 << MOT_C);
-    _delay_ms(MOT_DELAY);
+    _delay_ms(MOT_DELAY_ON);
     PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
+    _delay_ms(MOT_DELAY_OFF);
     stateDrive = 1;
     break;
   case 2 : 
     PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
     PORTB &= ~(1 << MOT_B);
-    _delay_ms(MOT_DELAY);
+    _delay_ms(MOT_DELAY_ON);
     PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
+    _delay_ms(MOT_DELAY_OFF);
     stateDrive = 2;
     break;
   case 3 : 
     PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
     PORTB &= ~(1 << MOT_D);
-    _delay_ms(MOT_DELAY);
+    _delay_ms(MOT_DELAY_ON);
     PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
+    _delay_ms(MOT_DELAY_OFF);
     stateDrive = 3;
     break;
   }
@@ -137,10 +143,12 @@ void command (int commandNumber){
 
 void oneStepForward(void){
   command (incState());
+  counter++;
 }
 
 void oneStepBack(void){
   command (decState());
+  counter--;
 }
 
 
@@ -178,17 +186,18 @@ void main(void) {
       TM1637_write(STEP_TIME + shift, colon);    
     } else {
       if (direction == 1){
-        uint8_t arr[4] = {0x00, 0x80, 0x00, 0x00};
-        TM1637_sendArray(arr);
+//        uint8_t arr[4] = {0x00, 0x80, 0x00, 0x00};
+//        TM1637_sendArray(arr);
       } else if (direction == 2) {
         oneStepForward();
-        uint8_t arr[4] = {0x00, 0x80, 0x40, 0x40};
-        TM1637_sendArray(arr);
+//        uint8_t arr[4] = {0x00, 0x80, 0x40, 0x40};
+//        TM1637_sendArray(arr);
       } else if (direction == 0) {
         oneStepBack();
-        uint8_t arr[4] = {0x40, 0xC0, 0x00, 0x00};
-        TM1637_sendArray(arr);
+//        uint8_t arr[4] = {0x40, 0xC0, 0x00, 0x00};
+//        TM1637_sendArray(arr);
       } 
+      TM1637_write(counter, colon);
     }   
   }
 }
