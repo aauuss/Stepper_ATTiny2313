@@ -25,10 +25,11 @@
 
 uint32_t    msec = 0, 
             lastTimeStep = 0;      
-int16_t     shift = 0;
+int16_t     period = 0,
+
 
 uint16_t    sec = 0,  
-            lastTimeShiftChange = 0,
+            lastTimeChange = 0,
             counter = 0;
             
 int8_t      stateDrive = 0, 
@@ -42,11 +43,13 @@ int8_t      stateDrive = 0,
 ISR(INT0_vect) {
   if (mode){
     if (PIND & (1 << ENC_B)) {
-      if (shift < 999) {if (PIND & (1 << ENC_SW)) {shift += 1;} else {shift += 10;}}
+      if (PIND & (1 << ENC_SW)) {(period < 9999) ? period ++ : period = 9999;} 
+      else {(period < 9990) ? period += 10 : period = 9999;}
     } else {
-      if (shift > -990) {if (PIND & (1 << ENC_SW)) {shift -= 1;} else {shift -= 10;}}
+      if (PIND & (1 << ENC_SW)) {(period > 0) ? period-- : period = 0;}
+      else {(period > 10) ? period -= 10 : period = 0;}
     }
-    lastTimeShiftChange = sec;
+    lastTimeChange = sec;
     interruptDetected = 1;
   } else {
     if (PIND & (1 << ENC_B)) {
@@ -62,7 +65,7 @@ ISR(TIMER1_COMPA_vect){
 }
 
 ISR(WDT_OVERFLOW_vect){
-  sec++;
+  //sec++;
   colon ^= 1;
 }
 
@@ -88,55 +91,80 @@ void setup(void) {
 
   TM1637_init();
 
-  shift = (EEPROM_read(0) << 8) | EEPROM_read(1);
+  period = (EEPROM_read(0) << 8) | EEPROM_read(1);
 }
 
 //==================================ПРОЦЕДУРЫ==================================================
 int incState(void){
   stateDrive++;
-  if (stateDrive > 3) stateDrive = 0;
+  if (stateDrive > 7) stateDrive = 0;
   return stateDrive;
 }
 
 int decState(void){
   stateDrive--;
-  if (stateDrive < 0) stateDrive = 3;
+  if (stateDrive < 0) stateDrive = 7;
   return stateDrive;
 }
 
 void command (int commandNumber){
+    
+    /*      -1 - все обмотки выклоючены, двигатель остановлен.
+     * st   0   1   2   3   4   5   6   7
+     *      A   AC  C   CB  B   BD  D   DA  - на какие вывода подано напряжение
+     * A|   1   1   0   0   0   0   0   1   - Обмотка 1
+     * B|   0   0   0   1   1   1   0   0   -
+     * C|   0   1   1   1   0   0   0   0   - Обмотка 2
+     * D|   0   0   0   0   0   1   1   1   -
+     */
+    
   switch (commandNumber) {
+  case -1 : 
+    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));    
+    break;    
   case 0 : 
-    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
     PORTB &= ~(1 << MOT_A);
-    _delay_ms(MOT_DELAY_ON);
-    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
-    _delay_ms(MOT_DELAY_OFF);
+    PORTB |= ((1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
     stateDrive = 0;
     break;
   case 1 : 
-    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
+    PORTB &= ~(1 << MOT_A);
     PORTB &= ~(1 << MOT_C);
-    _delay_ms(MOT_DELAY_ON);
-    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
-    _delay_ms(MOT_DELAY_OFF);
+    PORTB |= ((1 << MOT_B) | (1 << MOT_D));
     stateDrive = 1;
-    break;
+    break;    
   case 2 : 
-    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
-    PORTB &= ~(1 << MOT_B);
-    _delay_ms(MOT_DELAY_ON);
-    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
-    _delay_ms(MOT_DELAY_OFF);
+    PORTB &= ~(1 << MOT_C);
+    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_D));    
     stateDrive = 2;
     break;
   case 3 : 
-    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
-    PORTB &= ~(1 << MOT_D);
-    _delay_ms(MOT_DELAY_ON);
-    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C) | (1 << MOT_D));
-    _delay_ms(MOT_DELAY_OFF);
+    PORTB &= ~(1 << MOT_C);
+    PORTB &= ~(1 << MOT_B);
+    PORTB |= ((1 << MOT_A) | (1 << MOT_D));  
     stateDrive = 3;
+    break;
+  case 4 : 
+    PORTB &= ~(1 << MOT_B);
+    PORTB |= ((1 << MOT_A) | (1 << MOT_C) | (1 << MOT_D));    
+    stateDrive = 4;
+    break;
+  case 5 : 
+    PORTB &= ~(1 << MOT_B);
+    PORTB &= ~(1 << MOT_D);
+    PORTB |= ((1 << MOT_A) | (1 << MOT_C));  
+    stateDrive = 5;
+    break;
+  case 6 : 
+    PORTB &= ~(1 << MOT_D);
+    PORTB |= ((1 << MOT_A) | (1 << MOT_B) | (1 << MOT_C));  
+    stateDrive = 6;
+    break;
+  case 7 : 
+    PORTB &= ~(1 << MOT_D);
+    PORTB &= ~(1 << MOT_A);
+    PORTB |= ((1 << MOT_B) | (1 << MOT_C));    
+    stateDrive = 7;
     break;
   }
 }
@@ -151,6 +179,9 @@ void oneStepBack(void){
   counter--;
 }
 
+void stopStepper(void){
+    command(-1);
+}
 
 //===================================ГЛАВНАЯ ПРОГРАММА==========================================
 void main(void) {
@@ -169,10 +200,10 @@ void main(void) {
       lastSwState = 0;
       interruptDetected = 0;
     }
-//-------------запись shift в EEPROM----------------    
+//-------------запись в EEPROM----------------    
     if ((sec - lastTimeShiftChange > 2) && (interruptDetected == 1)) {
-      EEPROM_write(0, (shift >> 8));
-      EEPROM_write(1, (shift & 0xFF));
+      EEPROM_write(0, (period >> 8));
+      EEPROM_write(1, (period & 0xFF));
       interruptDetected = 0;
     }
 
@@ -186,6 +217,7 @@ void main(void) {
       TM1637_write(STEP_TIME + shift, colon);    
     } else {
       if (direction == 1){
+        stopStepper();  
 //        uint8_t arr[4] = {0x00, 0x80, 0x00, 0x00};
 //        TM1637_sendArray(arr);
       } else if (direction == 2) {
